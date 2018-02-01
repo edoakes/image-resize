@@ -1,10 +1,6 @@
-from __future__ import print_function
-import base64
-from cStringIO import StringIO
-import time
-import sys
-sys.path.insert(0,'./lib')
+import time, base64
 from PIL import Image
+from cStringIO import StringIO
      
 def resize_image(record):
     decoded = base64.b64decode(record['data'])
@@ -15,7 +11,7 @@ def resize_image(record):
         image.save(output, format=record['format'])
         return base64.b64encode(output.getvalue())
      
-def handler(event, context):
+def handler(conn, event):
     start = time.time()
     output = {'resized': []}
     for record in event['Records']:

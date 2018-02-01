@@ -1,10 +1,9 @@
-import boto3
-import base64
-import time
-import json
-import sys
+import sys, time, json, base64, requests, argparse
 
-client = boto3.client('lambda')
+parser = argparse.ArgumentParser(description='Image processing benchmark.')
+parser.add_argument('--num-images', default=1, type=int, help='Number of copies of integer to resize.')
+parser.add_argument('--num-requests', default=1, type=int, help='Number of times to send request.')
+parser.add_argument('service', type=str, help='{aws,ol,ow}')
 
 if len(sys.argv) != 3 or sys.argv[1] not in ('resize', 'baseline', 'dryrun'):
     print('usage: python bench.py <resize|baseline|dryrun> <count>')
