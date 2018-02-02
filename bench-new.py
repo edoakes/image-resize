@@ -5,6 +5,7 @@ parser.add_argument('--num-images', default=1, type=int, help='Number of copies 
 parser.add_argument('--num-requests', default=1, type=int, help='Number of times to send request.')
 parser.add_argument('--ol-address', default='localhost', type=str, help='IP address of OpenLambda worker.')
 parser.add_argument('service', type=str, help='{aws,ol,ow}')
+parser.add_argument('--cold', required=False, action='store_true')
 
 def main(args):
     if args.service == 'aws':
@@ -33,7 +34,17 @@ def aws(args):
 
     import boto3
     client = boto3.client('lambda')
+    if not args.cold:
+        with open('resize.zip', 'rb') as f:
+            client.update_function_code(FunctionName='resize',
+                    ZipFile=f.read())
+        client.invoke(FunctionName='resize',
+                Payload=payload)
     for i in xrange(args.num_requests):
+        if args.cold:
+            with open('resize.zip', 'rb') as f:
+                client.update_function_code(FunctionName='resize',
+                        ZipFile=f.read())
         start = time.time()
         response = client.invoke(
             FunctionName='resize',
