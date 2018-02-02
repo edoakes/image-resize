@@ -3,9 +3,19 @@ import sys, time, json, base64, requests, argparse
 parser = argparse.ArgumentParser(description='Image processing benchmark.')
 parser.add_argument('--num-images', default=1, type=int, help='Number of copies of integer to resize.')
 parser.add_argument('--num-requests', default=1, type=int, help='Number of times to send request.')
+parser.add_argument('--ol-address', default='localhost', type=str, help='IP address of OpenLambda worker.')
 parser.add_argument('service', type=str, help='{aws,ol,ow}')
 
-record = json.loads('''
+def main(args):
+    if args.service == 'aws':
+        aws(args)
+    elif args.service == 'ol':
+        ol(args)
+    else:
+        print('invalid service: %s' % args.service)
+        sys.exit(1)
+
+aws_record = json.loads('''
 {
   "s3": {
     "bucket": {
@@ -18,22 +28,12 @@ record = json.loads('''
 }
 ''')
 
-def main(args):
-    payload = json.dumps({'Records': [record for _ in range(args.num_images)]})
+def aws(args):
+    payload = json.dumps({'Records': [aws_record for _ in range(args.num_images)]})
 
-    if args.service == 'aws':
-        aws(payload, args.num_requests)
-    elif args.service == 'ol':
-        ol(payload, args.num_requests)
-    else:
-        print('invalid service: %s' % args.service)
-        sys.exit(1)
-
-def aws(payload, n_requests):
     import boto3
     client = boto3.client('lambda')
-    print('latency lambda_duration')
-    for i in xrange(n_requests):
+    for i in xrange(args.num_requests):
         start = time.time()
         response = client.invoke(
             FunctionName='resize',
@@ -41,15 +41,31 @@ def aws(payload, n_requests):
         )
         elapsed = (time.time() - start) * 1000
         output = json.loads(response['Payload'].read())
-        print('%.3f %.3f' % (elapsed, output['duration']))
+        print('%.3f %.3f %.3f %.3f' % (elapsed, output['download'], output['compute'], output['upload']))
+        time.sleep(1)
 
-def ol(payload, n_requests):
-    print('latency lambda_duration')
-    for i in xrange(n_requests):
+ol_record = json.loads('''
+{
+  "s3": {
+    "bucket": {
+      "name": "lambda-resize-image-west"
+    },
+    "object": {
+      "key": "texture.tiff"
+    }
+  }
+}
+''')
+
+def ol(args):
+    payload = json.dumps({'Records': [ol_record for _ in range(args.num_images)]})
+
+    for i in xrange(args.num_requests):
         start = time.time()
-        r = requests.post('http://localhost:8080/runLambda/ol-resize', data=payload)
+        r = requests.post('http://{ip}:8080/runLambda/ol-resize'.format(ip=args.ol_address), data=payload)
         elapsed = (time.time() - start) * 1000
-        print('%.3f %.3f' % (elapsed, r.json()['duration']))
+        print('%.3f %.3f %.3f %.3f' % (elapsed, r.json()['download'], r.json()['compute'], r.json()['upload']))
+        time.sleep(1)
 
 if __name__ == '__main__':
     main(parser.parse_args())
