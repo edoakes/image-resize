@@ -1,3 +1,2 @@
-OL tests are install cache only (denoted by 'nocache') and install + import cache ('denoted by cache').
-
-Each test sends a single request to resize 'n' copies of the test image in the parent directory.
+Data format (all in MS):
+client_t download_t compute_t upload_t
