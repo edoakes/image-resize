@@ -4,7 +4,6 @@ import boto3
 
 ACCESS_KEY = 'FOOBAR'
 SECRET_KEY = 'FOOBAR'
-REGION = 'us-west-1'
      
 def resize_image(image_path, resized_path):
     with Image.open(image_path) as image:
