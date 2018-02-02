@@ -4,6 +4,7 @@ parser = argparse.ArgumentParser(description='Image processing benchmark.')
 parser.add_argument('--num-images', default=1, type=int, help='Number of copies of integer to resize.')
 parser.add_argument('--num-requests', default=1, type=int, help='Number of times to send request.')
 parser.add_argument('--ol-address', default='localhost', type=str, help='IP address of OpenLambda worker.')
+parser.add_argument('--ow-endpoint', type=str, help='Full HTTP URL for OpenWhisk web action')
 parser.add_argument('service', type=str, help='{aws,ol,ow}')
 parser.add_argument('--cold', required=False, action='store_true')
 
@@ -12,6 +13,8 @@ def main(args):
         aws(args)
     elif args.service == 'ol':
         ol(args)
+    elif args.service == 'ow':
+        ow(args)
     else:
         print('invalid service: %s' % args.service)
         sys.exit(1)
@@ -74,6 +77,29 @@ def ol(args):
     for i in xrange(args.num_requests):
         start = time.time()
         r = requests.post('http://{ip}:8080/runLambda/ol-resize'.format(ip=args.ol_address), data=payload)
+        elapsed = (time.time() - start) * 1000
+        print('%.3f %.3f %.3f %.3f' % (elapsed, r.json()['download'], r.json()['compute'], r.json()['upload']))
+        time.sleep(1)
+
+ow_record = json.loads('''
+{
+  "s3": {
+    "bucket": {
+      "name": "lambda-resize-image-ow"
+    },
+    "object": {
+      "key": "texture.tiff"
+    }
+  }
+}
+''')
+
+def ow(args):
+    payload = json.dumps({'Records': [ow_record for _ in range(args.num_images)]})
+
+    for i in xrange(args.num_requests):
+        start = time.time()
+        r = requests.post(args.ow_endpoint, data={'payload': "".join(payload.split())})
         elapsed = (time.time() - start) * 1000
         print('%.3f %.3f %.3f %.3f' % (elapsed, r.json()['download'], r.json()['compute'], r.json()['upload']))
         time.sleep(1)
