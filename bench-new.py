@@ -1,10 +1,13 @@
-import sys, time, json, base64, requests, argparse
+import sys, time, json, base64, requests, argparse, os
+import subprocess as sp
+
+WSK_CLI = '/home/ubuntu/incubator-openwhisk/bin/wsk'
+WSK_PROPS = '/home/ubuntu/.wskprops'
 
 parser = argparse.ArgumentParser(description='Image processing benchmark.')
 parser.add_argument('--num-images', default=1, type=int, help='Number of copies of integer to resize.')
 parser.add_argument('--num-requests', default=1, type=int, help='Number of times to send request.')
 parser.add_argument('--ol-address', default='localhost', type=str, help='IP address of OpenLambda worker.')
-parser.add_argument('--ow-endpoint', type=str, help='Full HTTP URL for OpenWhisk web action')
 parser.add_argument('service', type=str, help='{aws,ol,ow}')
 parser.add_argument('--cold', required=False, action='store_true')
 
@@ -94,12 +97,38 @@ ow_record = json.loads('''
 }
 ''')
 
+def upload_ow_webaction(num):
+    with open(os.devnull, 'w') as dnull:
+        action = 'ow-resize%d' % num
+        sp.call("%s action delete %s --insecure" % (WSK_CLI, action), shell=True, stdout=dnull, stderr=dnull)
+        sp.call("%s action create %s --kind python:2 --insecure --web true ow-resize/ow-resize.zip" % (WSK_CLI, action), shell=True,  stdout=dnull, stderr=dnull)
+        webaction_result_b = sp.check_output("%s api create /root /%s post %s --response-type json --insecure" % (WSK_CLI, action, action), stderr=sp.STDOUT, shell=True)
+        second_half =  str(webaction_result_b).split("api")[1]
+        endpoint = 'http://%s@%s:9001/api%s' % (AUTH, APIHOST, second_half)
+        return endpoint.strip()
+
 def ow(args):
+    global AUTH
+    global APIHOST
+    with open(WSK_PROPS, 'r') as f:
+        lines = f.readlines()
+        for l in lines:
+            ls = l.split('=')
+            if ls[0] == 'AUTH':
+                AUTH = ls[1].strip()
+            if ls[0] == 'APIHOST':
+                APIHOST = ls[1].strip()
+
     payload = json.dumps({'Records': [ow_record for _ in range(args.num_images)]})
+    
+    if not args.cold:
+        ow_endpoint = upload_ow_webaction(0)
 
     for i in xrange(args.num_requests):
+        if args.cold:
+            ow_endpoint = upload_ow_webaction(i)
         start = time.time()
-        r = requests.post(args.ow_endpoint, data={'payload': "".join(payload.split())})
+        r = requests.post(ow_endpoint, data={'payload': "".join(payload.split())})
         elapsed = (time.time() - start) * 1000
         print('%.3f %.3f %.3f %.3f' % (elapsed, r.json()['download'], r.json()['compute'], r.json()['upload']))
         time.sleep(1)
